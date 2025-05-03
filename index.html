@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echo of Every Click - Visual Stats</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #020210;
+            font-family: 'Inter', sans-serif;
+            color: #e0e0e0;
+        }
+        #webglCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            display: block;
+        }
+        .content-overlay {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            padding-top: 2rem;
+            width: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .main-title-area {
+             margin-bottom: 0.75rem;
+             text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+        }
+        .stats-area {
+            margin-top: 0.75rem;
+            background-color: rgba(10, 10, 30, 0.8); /* Slightly more opaque */
+            padding: 0.8rem 1.5rem;
+            border-radius: 0.75rem;
+            max-width: 90%;
+            width: fit-content;
+            pointer-events: auto;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(100, 100, 200, 0.2);
+            text-align: left;
+            display: flex; /* Use flex for side-by-side layout */
+            align-items: flex-start; /* Align items to the top */
+        }
+        .stats-text-content {
+            flex-grow: 1; /* Allow text content to take available space */
+        }
+        .stats-text-content p, .stats-text-content div {
+            margin: 0.25rem 0; /* Further reduced margin */
+            font-size: 0.7rem;
+            line-height: 1.3;
+            color: #c0c0e0;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+        }
+        .stats-text-content strong {
+            color: #e0e0ff;
+            font-size: 0.75rem;
+        }
+        .live-counter {
+            font-weight: bold;
+            color: #66ffcc;
+            font-size: 0.8rem;
+            display: inline-block;
+            min-width: 4em;
+            text-align: right;
+            margin-left: 4px;
+        }
+        #liveCounterDisplay {
+             color: #88ddff;
+             font-size: 0.9rem;
+        }
+        #dataRateIndicator {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            background-color: #ff6666;
+            border-radius: 50%;
+            margin-left: 4px;
+            vertical-align: middle;
+            transition: transform 0.05s ease-out, opacity 0.05s ease-out;
+        }
+        .stat-line {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+        }
+        .stat-label {
+            white-space: nowrap;
+            margin-right: 10px;
+        }
+        /* Styles for the simple rate graph */
+        .rate-graph-container {
+            width: 25px; /* Width of the graph area */
+            height: 60px; /* Max height of the graph */
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+            margin-left: 1rem; /* Space between text and graph */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; /* Bar grows from bottom */
+            overflow: hidden;
+            border: 1px solid rgba(100, 100, 200, 0.1);
+        }
+        #rateGraphBar {
+            width: 100%;
+            background: linear-gradient(to top, #50f0d0, #70ffef); /* Gradient color */
+            height: 50%; /* Default height */
+            transition: height 0.1s linear; /* Smooth height transition */
+            box-shadow: inset 0 0 5px rgba(200, 255, 240, 0.3);
+        }
+
+        html, body {
+             width: 100%;
+             height: 100%;
+        }
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <canvas id="webglCanvas"></canvas>
+
+    <div class="content-overlay">
+        <div class="main-title-area">
+            <h1 class="text-3xl md:text-5xl font-bold text-gray-100 mb-2">The Echo of Every Click</h1>
+            <p class="text-md md:text-lg text-gray-300">(WebGL Simulation)</p>
+        </div>
+
+        <div class="stats-area">
+            <div class="stats-text-content">
+                 <div><strong>Global Scale (Est. Early 2025):</strong></div>
+                 <div class="stat-line"><span class="stat-label">Internet Users:</span> <span>~5.56 Billion</span></div>
+                 <div class="stat-line"><span class="stat-label">Data Rate:</span> <span>~4.65 PB/s <span id="dataRateIndicator"></span></span></div>
+                 <div class="stat-line"><span class="stat-label">Google Searches/s:</span> <span>~99,000</span></div>
+                 <hr class="border-t border-gray-600 my-1">
+                 <div><strong>Simulated Activity / Second (Est.):</strong></div>
+                 <div class="stat-line"><span class="stat-label">Emails Sent:</span> <span id="emailCounter" class="live-counter">0</span></div>
+                 <div class="stat-line"><span class="stat-label">X Posts:</span> <span id="xCounter" class="live-counter">0</span></div>
+                 <div class="stat-line"><span class="stat-label">New Users:</span> <span id="newUserCounter" class="live-counter">0</span></div>
+                 <hr class="border-t border-gray-600 my-1">
+                 <div><strong>Total Interactions (Since Load):</strong> <span id="liveCounterDisplay" class="live-counter">0</span></div>
+                 <p class="text-xs mt-1 text-gray-400">(Sources: DataReportal, Statista, etc.)</p>
+            </div>
+            <div class="rate-graph-container">
+                <div id="rateGraphBar"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer;
+        let particleSystem, particleGeometry;
+        const particles = [];
+        const maxParticles = 75000;
+        const particleLifetime = 4.5;
+        const generationRate = 1500;
+        let timeSinceLastGeneration = 0;
+
+        let simulatedInteractions = 0;
+        const interactionsPerSecond = 99000;
+        const newUserRatePerSecond = 4.3;
+        const emailsPerSecond = 4180000;
+        const xPostsPerSecond = 5780;
+        let newUsersThisSession = 0;
+        let emailsThisSecond = 0;
+        let xPostsThisSecond = 0;
+        let secondTimer = 0;
+        let currentInteractionRate = interactionsPerSecond; // For graph
+
+        const liveCounterElement = document.getElementById('liveCounterDisplay');
+        const newUserCounterElement = document.getElementById('newUserCounter');
+        const emailCounterElement = document.getElementById('emailCounter');
+        const xCounterElement = document.getElementById('xCounter');
+        const dataRateIndicatorElement = document.getElementById('dataRateIndicator');
+        const rateGraphBarElement = document.getElementById('rateGraphBar');
+
+        const vertexShader = `
+            attribute float size;
+            attribute vec3 customColor;
+            attribute float alpha;
+            varying vec3 vColor;
+            varying float vAlpha;
+
+            void main() {
+                vColor = customColor;
+                vAlpha = alpha;
+                vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+                gl_PointSize = size * ( 350.0 / -mvPosition.z );
+                gl_Position = projectionMatrix * mvPosition;
+            }
+        `;
+
+        const fragmentShader = `
+            varying vec3 vColor;
+            varying float vAlpha;
+
+            void main() {
+                float distanceToCenter = length( gl_PointCoord - vec2( 0.5 ) );
+                float strength = 1.0 - smoothstep( 0.35, 0.5, distanceToCenter );
+                if ( strength <= 0.0 || vAlpha <= 0.0 ) discard;
+                gl_FragColor = vec4( vColor, vAlpha * strength );
+            }
+        `;
+
+        class Particle {
+            constructor() {
+                const radius = 20;
+                this.position = new THREE.Vector3(
+                    (Math.random() - 0.5) * radius * 2,
+                    12 + Math.random() * 6,
+                    (Math.random() - 0.5) * radius * 2
+                );
+                this.velocity = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.6,
+                    -2.0 - Math.random() * 2.5,
+                    (Math.random() - 0.5) * 0.6
+                );
+                this.color = new THREE.Color().setHSL(0.55 + Math.random() * 0.15, 0.85, 0.65 + Math.random() * 0.2);
+                this.size = 0.8 + Math.random() * 2.0;
+                this.age = 0;
+                this.lifetime = particleLifetime * (0.7 + Math.random() * 0.6);
+                this.alpha = 0.0;
+            }
+
+            update(deltaTime) {
+                this.age += deltaTime;
+                if (this.age > this.lifetime) return false;
+
+                this.position.addScaledVector(this.velocity, deltaTime);
+                this.velocity.x += (Math.random() - 0.5) * 0.15 * deltaTime;
+                this.velocity.z += (Math.random() - 0.5) * 0.15 * deltaTime;
+                this.velocity.y -= 0.15 * deltaTime;
+
+                const lifeRatio = this.age / this.lifetime;
+                if (lifeRatio < 0.15) this.alpha = lifeRatio / 0.15;
+                else if (lifeRatio > 0.75) this.alpha = (1.0 - lifeRatio) / 0.25;
+                else this.alpha = 1.0;
+                this.alpha = Math.max(0.0, Math.min(1.0, this.alpha));
+
+                return true;
+            }
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x020210, 0.035);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 28;
+            camera.position.y = 6;
+            const canvas = document.getElementById('webglCanvas');
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setClearColor(0x000000, 0);
+
+            particleGeometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(maxParticles * 3);
+            const colors = new Float32Array(maxParticles * 3);
+            const sizes = new Float32Array(maxParticles);
+            const alphas = new Float32Array(maxParticles);
+            for (let i = 0; i < maxParticles; i++) {
+                 positions[i * 3 + 0] = 0; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = 0;
+                 colors[i * 3 + 0] = 1; colors[i * 3 + 1] = 1; colors[i * 3 + 2] = 1;
+                 sizes[i] = 0; alphas[i] = 0;
+            }
+            particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particleGeometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
+            particleGeometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+            particleGeometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+
+            const particleMaterial = new THREE.ShaderMaterial({
+                uniforms: {}, vertexShader, fragmentShader,
+                blending: THREE.AdditiveBlending, depthWrite: false,
+                transparent: true, vertexColors: true
+            });
+            particleSystem = new THREE.Points(particleGeometry, particleMaterial);
+            scene.add(particleSystem);
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function spawnParticles(count) {
+            let spawned = 0;
+            const particleCount = particles.length;
+            for (let i = 0; i < particleCount && spawned < count; i++) {
+                if (!particles[i]) { particles[i] = new Particle(); spawned++; }
+            }
+            while (spawned < count && particles.length < maxParticles) {
+                 particles.push(new Particle()); spawned++;
+            }
+            let searchAttempts = 0;
+            while(spawned < count && particles.length >= maxParticles && searchAttempts < maxParticles) {
+                 let foundSlot = false;
+                 for (let i = 0; i < maxParticles; i++) {
+                     if (!particles[i]) { particles[i] = new Particle(); spawned++; foundSlot = true; break; }
+                 }
+                 if (!foundSlot) break;
+                 searchAttempts++;
+            }
+        }
+
+        const clock = new THREE.Clock();
+        let lastCounterUpdateTime = 0;
+
+        function formatNumber(num) {
+             if (num >= 1000000) {
+                 return (num / 1000000).toFixed(1) + ' M';
+             } else if (num >= 1000) {
+                 return (num / 1000).toFixed(1) + ' k';
+             }
+             return Math.floor(num).toLocaleString('en-US');
+        }
+
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const deltaTime = Math.min(clock.getDelta(), 0.1);
+            const elapsedTime = clock.elapsedTime;
+            timeSinceLastGeneration += deltaTime;
+            secondTimer += deltaTime;
+
+            const particlesToGenerate = Math.floor(timeSinceLastGeneration * generationRate);
+            if (particlesToGenerate > 0) {
+                spawnParticles(particlesToGenerate);
+                timeSinceLastGeneration = Math.max(0, timeSinceLastGeneration - (particlesToGenerate / generationRate));
+            }
+
+            currentInteractionRate = interactionsPerSecond * (0.9 + Math.random() * 0.2);
+            simulatedInteractions += deltaTime * currentInteractionRate;
+            newUsersThisSession += deltaTime * newUserRatePerSecond * (0.9 + Math.random() * 0.2);
+
+            emailsThisSecond += deltaTime * emailsPerSecond * (0.95 + Math.random() * 0.1);
+            xPostsThisSecond += deltaTime * xPostsPerSecond * (0.95 + Math.random() * 0.1);
+
+            if (elapsedTime - lastCounterUpdateTime > 0.1) {
+                 if (liveCounterElement) {
+                     liveCounterElement.textContent = Math.floor(simulatedInteractions).toLocaleString('en-US');
+                 }
+                 if (newUserCounterElement) {
+                     newUserCounterElement.textContent = Math.floor(newUsersThisSession).toLocaleString('en-US');
+                 }
+                 if (emailCounterElement) {
+                     emailCounterElement.textContent = formatNumber(emailsThisSecond / secondTimer);
+                 }
+                 if (xCounterElement) {
+                     xCounterElement.textContent = formatNumber(xPostsThisSecond / secondTimer);
+                 }
+                 if (rateGraphBarElement) {
+                     // Normalize the rate for the bar height (e.g., assume max expected fluctuation)
+                     const maxExpectedRate = interactionsPerSecond * 1.15; // Allow some headroom
+                     const minExpectedRate = interactionsPerSecond * 0.85;
+                     const normalizedRate = (currentInteractionRate - minExpectedRate) / (maxExpectedRate - minExpectedRate);
+                     const barHeightPercent = Math.max(5, Math.min(100, normalizedRate * 100)); // Clamp between 5% and 100%
+                     rateGraphBarElement.style.height = `${barHeightPercent}%`;
+                 }
+
+                 lastCounterUpdateTime = elapsedTime;
+
+                 if (secondTimer >= 1.0) {
+                     emailsThisSecond = 0;
+                     xPostsThisSecond = 0;
+                     secondTimer = 0;
+                 }
+            }
+
+
+            if (dataRateIndicatorElement) {
+                const pulse = 0.6 + Math.sin(elapsedTime * 30) * 0.4;
+                dataRateIndicatorElement.style.opacity = pulse;
+                dataRateIndicatorElement.style.transform = `scale(${0.8 + pulse * 0.4})`;
+            }
+
+            const positions = particleGeometry.attributes.position.array;
+            const colors = particleGeometry.attributes.customColor.array;
+            const sizes = particleGeometry.attributes.size.array;
+            const alphas = particleGeometry.attributes.alpha.array;
+            let activeParticleCount = 0;
+            for (let i = 0; i < particles.length; i++) {
+                if (particles[i]) {
+                    const particle = particles[i];
+                    const isAlive = particle.update(deltaTime);
+                    if (isAlive) {
+                        positions[i * 3 + 0] = particle.position.x; positions[i * 3 + 1] = particle.position.y; positions[i * 3 + 2] = particle.position.z;
+                        colors[i * 3 + 0] = particle.color.r; colors[i * 3 + 1] = particle.color.g; colors[i * 3 + 2] = particle.color.b;
+                        sizes[i] = particle.size; alphas[i] = particle.alpha;
+                        activeParticleCount++;
+                    } else {
+                        alphas[i] = 0; sizes[i] = 0; particles[i] = null;
+                    }
+                } else {
+                     alphas[i] = 0; sizes[i] = 0;
+                }
+            }
+            particleGeometry.attributes.position.needsUpdate = true;
+            particleGeometry.attributes.customColor.needsUpdate = true;
+            particleGeometry.attributes.size.needsUpdate = true;
+            particleGeometry.attributes.alpha.needsUpdate = true;
+
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        }
+
+        init();
+        window.onload = animate;
+
+    </script>
+</body>
+</html>
